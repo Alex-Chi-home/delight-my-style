@@ -40,18 +40,25 @@ export default function Register() {
 
     setIsLoading(true);
 
-    const success = await register(email, password, name);
+    const result = await register(email, password, name);
     
-    if (success) {
-      toast({
-        title: 'Account created!',
-        description: 'Welcome to MAISON. Your account has been created.',
-      });
-      navigate('/');
+    if (result.success) {
+      if (result.needsConfirmation) {
+        toast({
+          title: 'Check your email!',
+          description: 'We sent you a confirmation link. Please check your inbox to verify your email.',
+        });
+      } else {
+        toast({
+          title: 'Account created!',
+          description: 'Welcome to MAISON. Your account has been created.',
+        });
+        navigate('/');
+      }
     } else {
       toast({
         title: 'Registration failed',
-        description: 'An account with this email already exists.',
+        description: result.error || 'An account with this email already exists.',
         variant: 'destructive',
       });
     }

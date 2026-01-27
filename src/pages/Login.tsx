@@ -19,9 +19,9 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    const success = await login(email, password);
+    const result = await login(email, password);
     
-    if (success) {
+    if (result.success) {
       toast({
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
@@ -30,7 +30,7 @@ export default function Login() {
     } else {
       toast({
         title: 'Sign in failed',
-        description: 'Invalid email or password. Please try again.',
+        description: result.error || 'Invalid email or password. Please try again.',
         variant: 'destructive',
       });
     }
