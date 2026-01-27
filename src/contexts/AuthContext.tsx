@@ -14,8 +14,8 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, name: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; needsConfirmation?: boolean }>;
   logout: () => Promise<void>;
   isAdmin: boolean;
 }
@@ -78,21 +78,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      return !error;
+      if (error) {
+        if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Please confirm your email before logging in. Check your inbox.' };
+        }
+        return { success: false, error: error.message };
+      }
+      return { success: true };
     } catch {
-      return false;
+      return { success: false, error: 'An unexpected error occurred' };
     }
   };
 
-  const register = async (email: string, password: string, name: string): Promise<boolean> => {
+  const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; needsConfirmation?: boolean }> => {
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -100,9 +106,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: { name },
         },
       });
-      return !error;
+      if (error) {
+        if (error.message.includes('rate limit')) {
+          return { success: false, error: 'Too many attempts. Please wait a few minutes and try again.' };
+        }
+        return { success: false, error: error.message };
+      }
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        return { success: true, needsConfirmation: true };
+      }
+      return { success: true };
     } catch {
-      return false;
+      return { success: false, error: 'An unexpected error occurred' };
     }
   };
 
