@@ -56,14 +56,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Use setTimeout to avoid blocking and defer async operations
       if (session?.user) {
-        const userData = await fetchUserData(session.user);
-        setUser(userData);
+        // Set basic user info immediately to unblock UI
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || 'User',
+          role: 'customer',
+        });
+        setIsLoading(false);
+        
+        // Then fetch full user data in background
+        setTimeout(async () => {
+          const userData = await fetchUserData(session.user);
+          if (userData) {
+            setUser(userData);
+          }
+        }, 0);
       } else {
         setUser(null);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     // THEN check for existing session
