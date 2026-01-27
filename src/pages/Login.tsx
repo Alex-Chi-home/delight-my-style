@@ -82,12 +82,6 @@ export default function Login() {
             Create one
           </Link>
         </p>
-
-        <div className="mt-8 p-4 bg-secondary/50 rounded-md">
-          <p className="text-sm text-muted-foreground text-center">
-            <strong>Demo Admin:</strong> admin@store.com / admin123
-          </p>
-        </div>
       </div>
     </Layout>
   );

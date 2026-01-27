@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Product {
   id: string;
@@ -15,112 +16,120 @@ export interface Product {
 
 interface ProductContextType {
   products: Product[];
-  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  isLoading: boolean;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   getProduct: (id: string) => Product | undefined;
+  refetch: () => Promise<void>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
-const PRODUCTS_KEY = 'fashion_store_products';
-
-const defaultProducts: Product[] = [
-  {
-    id: 'prod-1',
-    name: 'Minimalist Cotton Tee',
-    description: 'A timeless essential crafted from premium organic cotton. Features a relaxed fit and clean lines.',
-    price: 49,
-    category: 'Tops',
-    sizes: ['XS', 'S', 'M', 'L', 'XL'],
-    colors: ['White', 'Black', 'Sage'],
-    images: ['https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800'],
-    inStock: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'prod-2',
-    name: 'Tailored Wool Trousers',
-    description: 'Impeccably tailored trousers in fine Italian wool. A sophisticated silhouette for modern elegance.',
-    price: 189,
-    category: 'Bottoms',
-    sizes: ['S', 'M', 'L', 'XL'],
-    colors: ['Charcoal', 'Navy', 'Camel'],
-    images: ['https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=800'],
-    inStock: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'prod-3',
-    name: 'Cashmere Blend Coat',
-    description: 'Luxurious outerwear in a sumptuous cashmere-wool blend. Structured shoulders with a flowing silhouette.',
-    price: 495,
-    category: 'Outerwear',
-    sizes: ['XS', 'S', 'M', 'L'],
-    colors: ['Oat', 'Black'],
-    images: ['https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=800'],
-    inStock: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'prod-4',
-    name: 'Linen Relaxed Shirt',
-    description: 'Breathable linen shirt with a relaxed fit. Perfect for warm days and effortless style.',
-    price: 89,
-    category: 'Tops',
-    sizes: ['S', 'M', 'L', 'XL'],
-    colors: ['Natural', 'Sky Blue', 'Terracotta'],
-    images: ['https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800'],
-    inStock: true,
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const getStoredProducts = (): Product[] => {
-  const stored = localStorage.getItem(PRODUCTS_KEY);
-  if (stored) {
-    return JSON.parse(stored);
-  }
-  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(defaultProducts));
-  return defaultProducts;
-};
+// Transform database row to Product interface
+const transformProduct = (row: any): Product => ({
+  id: row.id,
+  name: row.name,
+  description: row.description || '',
+  price: Number(row.price),
+  category: row.category,
+  sizes: row.sizes || [],
+  colors: row.colors || [],
+  images: row.images || [],
+  inStock: row.in_stock,
+  createdAt: row.created_at,
+});
 
 export function ProductProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching products:', error);
+    } else {
+      setProducts((data || []).map(transformProduct));
+    }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
-    setProducts(getStoredProducts());
+    fetchProducts();
   }, []);
 
-  const saveProducts = (newProducts: Product[]) => {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(newProducts));
-    setProducts(newProducts);
+  const addProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
+    const { error } = await supabase.from('products').insert({
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      category: product.category,
+      sizes: product.sizes,
+      colors: product.colors,
+      images: product.images,
+      in_stock: product.inStock,
+    });
+
+    if (error) {
+      console.error('Error adding product:', error);
+      throw error;
+    }
+    await fetchProducts();
   };
 
-  const addProduct = (product: Omit<Product, 'id' | 'createdAt'>) => {
-    const newProduct: Product = {
-      ...product,
-      id: `prod-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-    saveProducts([...products, newProduct]);
+  const updateProduct = async (id: string, updates: Partial<Product>) => {
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.price !== undefined) dbUpdates.price = updates.price;
+    if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.sizes !== undefined) dbUpdates.sizes = updates.sizes;
+    if (updates.colors !== undefined) dbUpdates.colors = updates.colors;
+    if (updates.images !== undefined) dbUpdates.images = updates.images;
+    if (updates.inStock !== undefined) dbUpdates.in_stock = updates.inStock;
+
+    const { error } = await supabase
+      .from('products')
+      .update(dbUpdates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+    await fetchProducts();
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    const updated = products.map(p => 
-      p.id === id ? { ...p, ...updates } : p
-    );
-    saveProducts(updated);
-  };
+  const deleteProduct = async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
 
-  const deleteProduct = (id: string) => {
-    saveProducts(products.filter(p => p.id !== id));
+    if (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+    await fetchProducts();
   };
 
   const getProduct = (id: string) => products.find(p => p.id === id);
 
   return (
-    <ProductContext.Provider value={{ products, addProduct, updateProduct, deleteProduct, getProduct }}>
+    <ProductContext.Provider value={{ 
+      products, 
+      isLoading,
+      addProduct, 
+      updateProduct, 
+      deleteProduct, 
+      getProduct,
+      refetch: fetchProducts,
+    }}>
       {children}
     </ProductContext.Provider>
   );
