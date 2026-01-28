@@ -32,9 +32,11 @@ serve(async (req) => {
   }
 
   try {
-
     // Parse request body first (can only be read once!)
     const { items, totalPrice, userId }: EmailRequest = await req.json()
+
+    // Generate unique email ID for tracking
+    const emailId = crypto.randomUUID()
 
     // Create Supabase client with SERVICE_ROLE_KEY to bypass RLS
     const supabaseClient = createClient(
@@ -167,6 +169,9 @@ serve(async (req) => {
                   © ${new Date().getFullYear()} MAISON. All rights reserved.
                 </p>
               </div>
+
+              <!-- Tracking pixel -->
+              <img src="${Deno.env.get('SUPABASE_URL')}/functions/v1/track-email-open?id=${emailId}" width="1" height="1" style="display:none" alt="" />
             </body>
           </html>
         `,
@@ -179,8 +184,27 @@ serve(async (req) => {
       throw new Error(data.message || 'Failed to send email')
     }
 
+    // Save email log to database
+    const { error: logError } = await supabaseClient
+      .from('email_logs')
+      .insert({
+        email_id: emailId,
+        user_id: userId,
+        recipient_email: recipientEmail,
+        recipient_name: userName,
+        subject: 'Thank You for Your Order! 🎉',
+        order_total: totalPrice,
+        order_items: items,
+        sent_at: new Date().toISOString(),
+      })
+
+    if (logError) {
+      console.error('Error saving email log:', logError)
+      // Don't fail the request if logging fails
+    }
+
     return new Response(
-      JSON.stringify({ success: true, message: 'Email sent successfully' }),
+      JSON.stringify({ success: true, message: 'Email sent successfully', emailId }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -188,8 +212,9 @@ serve(async (req) => {
     )
   } catch (error) {
     console.error('Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

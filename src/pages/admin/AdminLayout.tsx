@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, Settings, ArrowLeft } from 'lucide-react';
+import { LayoutDashboard, Package, Mail, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AdminLayoutProps {
@@ -10,6 +10,7 @@ interface AdminLayoutProps {
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/products', label: 'Products', icon: Package },
+  { href: '/admin/emails', label: 'Email Logs', icon: Mail },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {

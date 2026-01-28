@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/admin/Dashboard";
 import AdminProducts from "./pages/admin/AdminProducts";
+import EmailLogs from "./pages/admin/EmailLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
                 <Route path="/register" element={<Register />} />
                 <Route path="/admin" element={<Dashboard />} />
                 <Route path="/admin/products" element={<AdminProducts />} />
+                <Route path="/admin/emails" element={<EmailLogs />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
