@@ -1,11 +1,126 @@
-import { Link } from 'react-router-dom';
-import { Minus, Plus, X, ShoppingBag } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Minus, Plus, X, ShoppingBag, Loader2 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Cart() {
   const { items, updateQuantity, removeFromCart, totalPrice, clearCart } = useCart();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleCheckout = async () => {
+    if (!user) {
+      toast({
+        title: 'Please sign in',
+        description: 'You need to be signed in to proceed to checkout.',
+        variant: 'destructive',
+      });
+      navigate('/login');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Get the current session token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      console.log('Session:', session ? 'exists' : 'null');
+      console.log('Session error:', sessionError);
+
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      console.log('Calling Edge Function for user:', user.id);
+
+      // Get the current session to get the access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('Current session:', sessionData.session ? 'exists' : 'missing');
+
+      if (!sessionData.session) {
+        throw new Error('No active session');
+      }
+
+      const accessToken = sessionData.session.access_token;
+      console.log('Access token:', accessToken ? 'present' : 'missing');
+
+      // Call the Edge Function using Supabase SDK with explicit Authorization header
+      const { data, error } = await supabase.functions.invoke('send-checkout-email', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: {
+          userId: user.id,
+          items: items.map(item => ({
+            product: {
+              id: item.product.id,
+              name: item.product.name,
+              price: item.product.price,
+            },
+            quantity: item.quantity,
+            size: item.size,
+            color: item.color,
+          })),
+          totalPrice,
+        },
+      });
+
+      console.log('Edge Function response:', { data, error });
+
+      if (error) {
+        console.error('Edge Function error details:', {
+          name: error.name,
+          message: error.message,
+          context: error.context,
+        });
+
+        // Try to get the error response body
+        if (error.context && error.context.body) {
+          try {
+            const errorBody = await error.context.json();
+            console.error('Error response body:', errorBody);
+          } catch (e) {
+            console.error('Could not parse error body:', e);
+          }
+        }
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      // Success!
+      toast({
+        title: 'Order Confirmed! 🎉',
+        description: 'Thank you for your order! Check your email for confirmation.',
+      });
+
+      // Clear the cart
+      await clearCart();
+
+      // Redirect to home
+      setTimeout(() => {
+        navigate('/');
+      }, 2000);
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast({
+        title: 'Checkout Failed',
+        description: 'There was an error processing your order. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -100,8 +215,23 @@ export default function Cart() {
                   <span>${totalPrice}</span>
                 </div>
               </div>
-              <Button className="w-full mb-3">Proceed to Checkout</Button>
-              <Button variant="outline" className="w-full" onClick={clearCart}>
+              <Button
+                className="w-full mb-3"
+                onClick={handleCheckout}
+                disabled={!user || isProcessing}
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : !user ? (
+                  'Sign In to Checkout'
+                ) : (
+                  'Proceed to Checkout'
+                )}
+              </Button>
+              <Button variant="outline" className="w-full" onClick={clearCart} disabled={isProcessing}>
                 Clear Bag
               </Button>
             </div>
