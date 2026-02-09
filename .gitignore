@@ -23,6 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment files
+.env
+.env.localdev
+.env.development
+.env.production
+!.env.example
+
 # Supabase
 supabase/.temp/
 supabase/functions/**/.env

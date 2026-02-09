@@ -9,6 +9,10 @@ export default function Home() {
   const { products } = useProducts();
   const featuredProducts = products.slice(0, 4);
 
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  console.log(SUPABASE_URL)
+  console.log(SUPABASE_PUBLISHABLE_KEY)
   return (
     <Layout>
       {/* Hero Section */}
