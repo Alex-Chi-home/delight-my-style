@@ -5,23 +5,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Интерфейс для входящего письма от Resend
-interface InboundEmail {
+// Интерфейс для вебхука от Resend
+interface ResendWebhookEvent {
+  type: 'email.received'
+  created_at: string
+  data: {
+    email_id: string
+    from: string
+    to: string[]
+    subject: string
+    created_at: string
+  }
+}
+
+// Интерфейс для полного письма из API
+interface ReceivedEmail {
+  object: string
+  id: string
+  to: string[]
   from: string
-  to: string
   subject: string
-  html?: string
-  text?: string
-  reply_to?: string
-  headers?: Record<string, string>
-  attachments?: Array<{
+  html: string | null
+  text: string | null
+  headers: Record<string, string>
+  attachments: Array<{
     filename: string
     content_type: string
     size: number
+    content?: string
   }>
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -29,18 +44,44 @@ serve(async (req) => {
 
   try {
     console.log('=== 📧 ПОЛУЧЕНО ВХОДЯЩЕЕ ПИСЬМО ===')
-    
-    // Получаем данные письма от Resend
-    const email: InboundEmail = await req.json()
-    
+
+    const event: ResendWebhookEvent = await req.json()
+
+
+    // Получаем email_id из вебхука
+    const emailId = event.data.email_id
+
+    // Получаем RESEND_API_KEY из переменных окружения
+    const resendApiKey = Deno.env.get('RESEND_API_KEY')
+    if (!resendApiKey) {
+      throw new Error('RESEND_API_KEY не установлен')
+    }
+
+    const apiUrl = `https://api.resend.com/emails/receiving/${emailId}`
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`
+      }
+    })
+
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Resend API error response:', errorText)
+      throw new Error(`Resend API error: ${response.status} ${response.statusText} - ${errorText}`)
+    }
+
+    const email: ReceivedEmail = await response.json()
+    console.log('✅ Получено письмо от API')
+
     // Логируем основную информацию
     console.log('\n📨 ОСНОВНАЯ ИНФОРМАЦИЯ:')
     console.log('От кого:', email.from)
-    console.log('Кому:', email.to)
+    console.log('Кому:', email.to.join(', '))
     console.log('Тема:', email.subject)
-    console.log('Reply-To:', email.reply_to || 'не указан')
-    
-    // Логируем содержимое письма
+
+
     console.log('\n📝 СОДЕРЖИМОЕ:')
     if (email.text) {
       console.log('Текстовая версия:')
@@ -48,15 +89,14 @@ serve(async (req) => {
       console.log(email.text)
       console.log('---')
     }
-    
+
     if (email.html) {
       console.log('\nHTML версия (первые 500 символов):')
       console.log('---')
       console.log(email.html.substring(0, 500))
       console.log('---')
     }
-    
-    // Логируем вложения
+
     if (email.attachments && email.attachments.length > 0) {
       console.log('\n📎 ВЛОЖЕНИЯ:')
       email.attachments.forEach((attachment, index) => {
@@ -68,17 +108,7 @@ serve(async (req) => {
       console.log('\n📎 ВЛОЖЕНИЯ: нет')
     }
     
-    // Логируем заголовки
-    if (email.headers) {
-      console.log('\n📋 ЗАГОЛОВКИ:')
-      Object.entries(email.headers).forEach(([key, value]) => {
-        console.log(`${key}: ${value}`)
-      })
-    }
     
-    console.log('\n=== ✅ ПИСЬМО ОБРАБОТАНО ===\n')
-    
-    // Возвращаем успешный ответ Resend
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -93,12 +123,13 @@ serve(async (req) => {
     )
   } catch (error) {
     console.error('❌ ОШИБКА при обработке письма:', error)
-    
-    // Возвращаем ошибку
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message 
+      JSON.stringify({
+        success: false,
+        error: errorMessage
       }),
       {
         status: 500,
