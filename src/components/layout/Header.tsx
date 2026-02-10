@@ -22,7 +22,7 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2">
-          <span className="font-serif text-2xl font-semibold tracking-tight">MAISON-dev</span>
+          <span className="font-serif text-2xl font-semibold tracking-tight">MAISON-main</span>
         </Link>
 
         {/* Desktop Navigation */}
